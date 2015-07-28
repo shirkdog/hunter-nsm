@@ -6,7 +6,7 @@ Simple install script for Snort/Bro IDS with JSON logging on FreeBSD
 Copyright (C) 2015 Michael Shirk, Daemon Security Inc.
 
 Hunter NSM is a modular platform for deploying network sensors. Instead of adding additional
-security vulnerabilities with the addition numerous tools, Hunter provides a minimalist approach to achieving
+security vulnerabilities with the addition of numerous tools, Hunter provides a minimalist approach to achieving
 full network monitoring with Bro NSM and Snort IDS.
 
 ## Features and Capabilities
