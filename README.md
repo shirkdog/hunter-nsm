@@ -22,10 +22,14 @@ All logging is configured to output to the /nsm directory (/nsm/bro2 for Bro, /n
 the script, ensure that you have a enough disk space to log the security data.
 
 Custom configs for Snort:
+
 `/usr/local/bin/snortUpdate.sh` This script runs PulledPork and restarts Snort for rule updates
+
 `/usr/local/bin/snortStartup.sh` This script starts u2json by way of `/etc/rc.local` and reads the snort output from /var/log/snort and writes out JSON events.
+
 `/usr/local/bin/du2json` This script that runs u2json.
 
 Custom configs for Bro
+
 `/opt/bro2/share/bro/site/local.bro` Updated the default site policy for JSON output
 
