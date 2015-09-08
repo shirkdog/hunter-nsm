@@ -27,9 +27,9 @@ Custom configs for Snort:
 
 `/usr/local/bin/snortStartup.sh` This script starts u2json by way of `/etc/rc.local` and reads the snort output from /var/log/snort and writes out JSON events.
 
-`/usr/local/bin/du2json` This script that runs u2json.
+`/usr/local/bin/du2json` This script runs u2json with the necessary command line arguments.
 
-Custom configs for Bro
+Custom configs for Bro:
 
 `/opt/bro2/share/bro/site/local.bro` Updated the default site policy for JSON output
 

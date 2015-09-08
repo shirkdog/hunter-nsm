@@ -40,7 +40,7 @@
 # Bro: 2.4
 # ids-tools: 0.4.4
 
-VERSION="0.2.0"
+VERSION="0.2.1"
 
 UID=`id -u`;
 
@@ -136,6 +136,17 @@ then
 	cd bro-2.4
 	./configure --prefix=/opt/bro2 --logdir=/nsm/bro2/logs --spooldir=/nsm/bro2/spool
 	gmake && gmake install
+	#test for the number of interfaces
+	#netmap will change the mode of the active NIC
+	NICTEST=`ifconfig -l | wc -w`
+	if [ -e /dev/netmap ] && [ -e /usr/include/net/netmap_user.h ] && [ $NICTEST > 2 ];
+	then
+		#build netmap plugin
+		cd /usr/src/bro-2.4/aux/plugins/netmap
+		./configure --bro-dist=/usr/bro-2.4/ --install-root=/opt/bro2/lib/bro/plugins --with-netmap=/usr/src
+		gmake && gmake install
+	fi
+
 	mkdir -p /nsm/bro2/logs
 	mkdir -p /nsm/bro2/spool
 	
@@ -146,12 +157,35 @@ then
 	# save defaults, but comment out everything
 	sed -i '' -e 's/^/#/g' /opt/bro2/etc/node.cfg
 	sed -i '' -e 's/^/#/g' /opt/bro2/etc/networks.cfg
-        cat << EOF >> /opt/bro2/etc/node.cfg
+	if [ -e /dev/netmap ] && [ -e /usr/include/net/netmap_user.h ] && [ $NICTEST > 2 ];
+	then
+		#Look for an available monitoring interface. Netmap supports Intel nics.
+		NICTEST=`ifconfig -l`;
+		for i in $NICTEST;
+		do
+			if [ "$i" != "$FBSD_INTERFACE" ] && [ ! $NETMAP_INT ];
+			then
+				#This is guess at selecting the next 
+				#non-management interface
+				NETMAP_INT=$i;
+				continue
+			fi
+		done
+        	cat << EOF >> /opt/bro2/etc/node.cfg
+[bro]
+type=standalone
+host=$LOCALHOST
+interface=netmap::$NETMAP_INT
+EOF
+	else
+        	cat << EOF >> /opt/bro2/etc/node.cfg
 [bro]
 type=standalone
 host=$LOCALHOST
 interface=$FBSD_INTERFACE
 EOF
+	fi
+
         if [ $FBSD_NETWORK = "0xffffff00" ] || [ $FBSD_NETWORK = "255.255.255.0" ];
         then
                 FBSD_NETADDR=`echo $FBSD_IPADDRESS |awk -F\. {'print $1"."$2"."$3".0"}'`
