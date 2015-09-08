@@ -37,10 +37,10 @@
 # Snort: 2.9.7.5
 # DAQ: 2.0.6
 # PulledPork: 0.7.2
-# Bro: 2.4
+# Bro: 2.4.1
 # ids-tools: 0.4.4
 
-VERSION="0.2.1"
+VERSION="0.2.2"
 
 UID=`id -u`;
 
@@ -131,9 +131,9 @@ echo "Packages Installed" >> /root/log.install
 if [ "$INSTALL" == "bro" ] || [ "$INSTALL" == "both" ];
 then
 	cd /usr/src
-        fetch https://www.bro.org/downloads/release/bro-2.4.tar.gz
-	tar -xzf bro-2.4.tar.gz
-	cd bro-2.4
+	fetch https://www.bro.org/downloads/release/bro-2.4.1.tar.gz
+	tar -xzf bro-2.4.1.tar.gz
+	cd bro-2.4.1
 	./configure --prefix=/opt/bro2 --logdir=/nsm/bro2/logs --spooldir=/nsm/bro2/spool
 	gmake && gmake install
 	#test for the number of interfaces
@@ -142,8 +142,8 @@ then
 	if [ -e /dev/netmap ] && [ -e /usr/include/net/netmap_user.h ] && [ $NICTEST > 2 ];
 	then
 		#build netmap plugin
-		cd /usr/src/bro-2.4/aux/plugins/netmap
-		./configure --bro-dist=/usr/bro-2.4/ --install-root=/opt/bro2/lib/bro/plugins --with-netmap=/usr/src
+		cd /usr/src/bro-2.4.1/aux/plugins/netmap
+		./configure --bro-dist=/usr/bro-2.4.1/ --install-root=/opt/bro2/lib/bro/plugins --with-netmap=/usr/src
 		gmake && gmake install
 	fi
 
@@ -480,7 +480,7 @@ Hunter NSM Version $VERSION
 Snort: 2.9.7.5
 DAQ: 2.0.6
 PulledPork: 0.7.2
-Bro: 2.4
+Bro: 2.4.1
 ids-tools: 0.4.4
 EOF
 
