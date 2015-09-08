@@ -143,7 +143,7 @@ then
 	then
 		#build netmap plugin
 		cd /usr/src/bro-2.4.1/aux/plugins/netmap
-		./configure --bro-dist=/usr/bro-2.4.1/ --install-root=/opt/bro2/lib/bro/plugins --with-netmap=/usr/src
+		./configure --bro-dist=/usr/src/bro-2.4.1/ --install-root=/opt/bro2/lib/bro/plugins --with-netmap=/usr/src
 		gmake && gmake install
 	fi
 
