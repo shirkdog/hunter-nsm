@@ -40,7 +40,7 @@
 # Bro: 2.4.1
 # ids-tools: 0.4.4
 
-VERSION="0.2.2"
+VERSION="0.2.3"
 
 UID=`id -u`;
 
