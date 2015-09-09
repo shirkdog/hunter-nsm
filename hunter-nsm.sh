@@ -57,11 +57,13 @@ help_message()
 	echo
 	echo "Simple install script for Snort/Bro IDS with JSON logging on FreeBSD"
 	echo
-	echo "Usage hunterNSM.sh <snort|bro|both> <oinkcode>";
+	echo "Usage hunterNSM.sh --install <snort|bro|both> --oinkcode <oinkcode> --netmap <interface>";
 	echo
-	echo "snort = Install Snort with json output."
-	echo "bro = Install Bro with json output."
-	echo "both = Install Snort and Bro with json output."
+	echo "snort = Install Snort with JSON output."
+	echo "bro = Install Bro with JSON output."
+	echo "both = Install Snort and Bro with JSON output."
+	echo "oinkcode = Uses this oinkcode to configure Snort rule updates."
+	echo "netmap = Configures this interface to use netmap (requires netmap support)."
 	echo "";
 	echo "You need to supply a correct oinkcode for the";
 	echo "snort or both install option.";
@@ -71,20 +73,42 @@ help_message()
 	exit 13;
 }
 
-if [ ! $1 ]; 
+
+# Process command line
+while [ $# -ge 1 ]; do
+	case $1 in
+        	--install)
+                    shift
+                    INSTALL=$1
+                ;;
+                --oinkcode)
+                    shift
+                    OINKCODE=$1
+                ;;
+                --netmap)
+                    shift
+                    NETMAP=$1
+                ;;
+                *)
+                    echo "Invalid Option: $1"
+                    exit 13
+                ;;
+	esac
+        shift
+done
+
+if [ ! $INSTALL ]; 
 then
 	help_message;
-elif [ "$1" == "snort"  ] && [ ! $2 ];
+elif [ "$INSTALL" == "snort"  ] && [ ! $OINKCODE ];
 then
 	help_message;
-elif [ "$1" == "both"  ] && [ ! $2 ];
+elif [ "$INSTALL" == "both"  ] && [ ! $OINKCODE ];
 then
 	help_message;
 fi
 
-# Process command line
-INSTALL=$1
-OINKCODE=$2
+#check network configuration
 
 FBSD_IPADDRESS=`grep ifconfig_ /etc/rc.conf | grep -v _alias | grep '="\ *inet' | awk '{print $2}'`
 FBSD_NETWORK=`grep ifconfig_ /etc/rc.conf | grep -v _alias | grep '="\ *inet' | awk '{print $4}'|tr -d '"'`
@@ -106,6 +130,15 @@ then
 	echo "";
 	exit 13;
 fi
+
+if [ "$FBSD_INTERFACE" == "$NETMAP" ];
+then
+	echo "Error: the netmap interface cannot be the same as the interface used for regular networking.";
+	echo "Select another interface and try again";
+	echo "";
+	exit 13;
+fi
+
 
 LOCALHOST=`hostname`
 
@@ -136,10 +169,8 @@ then
 	cd bro-2.4.1
 	./configure --prefix=/opt/bro2 --logdir=/nsm/bro2/logs --spooldir=/nsm/bro2/spool
 	gmake && gmake install
-	#test for the number of interfaces
 	#netmap will change the mode of the active NIC
-	NICTEST=`ifconfig -l | wc -w`
-	if [ -e /dev/netmap ] && [ -e /usr/include/net/netmap_user.h ] && [ $NICTEST > 2 ];
+	if [ $NETMAP ] && [ -e /dev/netmap ] && [ -e /usr/include/net/netmap_user.h ] && [ "$FBSD_INTERFACE" != "$NETMAP" ];
 	then
 		#build netmap plugin
 		cd /usr/src/bro-2.4.1/aux/plugins/netmap
@@ -157,26 +188,16 @@ then
 	# save defaults, but comment out everything
 	sed -i '' -e 's/^/#/g' /opt/bro2/etc/node.cfg
 	sed -i '' -e 's/^/#/g' /opt/bro2/etc/networks.cfg
-	if [ -e /dev/netmap ] && [ -e /usr/include/net/netmap_user.h ] && [ $NICTEST > 2 ];
+	if [ $NETMAP ] && [ -e /dev/netmap ] && [ -e /usr/include/net/netmap_user.h ] && [ "$FBSD_INTERFACE" != "$NETMAP" ];
 	then
-		#Look for an available monitoring interface. Netmap supports Intel nics.
-		NICTEST=`ifconfig -l`;
-		for i in $NICTEST;
-		do
-			if [ "$i" != "$FBSD_INTERFACE" ] && [ ! $NETMAP_INT ];
-			then
-				#This is guess at selecting the next 
-				#non-management interface
-				NETMAP_INT=$i;
-				continue
-			fi
-		done
+		#setup netmap interface
         	cat << EOF >> /opt/bro2/etc/node.cfg
 [bro]
 type=standalone
 host=$LOCALHOST
-interface=netmap::$NETMAP_INT
+interface=netmap::$NETMAP
 EOF
+        echo "Netmap configured for Bro" >> /root/log.install
 	else
         	cat << EOF >> /opt/bro2/etc/node.cfg
 [bro]
@@ -184,6 +205,7 @@ type=standalone
 host=$LOCALHOST
 interface=$FBSD_INTERFACE
 EOF
+        echo "Standard Network configured for Bro" >> /root/log.install
 	fi
 
         if [ $FBSD_NETWORK = "0xffffff00" ] || [ $FBSD_NETWORK = "255.255.255.0" ];
