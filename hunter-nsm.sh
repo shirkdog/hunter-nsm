@@ -34,13 +34,13 @@
 #
 # Install Versions
 # OS: FreeBSD/HardenedBSD 10.1 amd64
-# Snort: 2.9.7.5
+# Snort: 2.9.8.0
 # DAQ: 2.0.6
 # PulledPork: 0.7.2
 # Bro: 2.4.1
 # ids-tools: 0.4.4
 
-VERSION="0.2.3"
+VERSION="0.2.4"
 
 UID=`id -u`;
 
@@ -307,7 +307,7 @@ touch /usr/local/etc/snort/rules/black_list.rules
 # DAQ/Snort install
 mkdir -p /usr/src/snort
 cd /usr/src/snort
-fetch https://snort.org/downloads/snort/snort-2.9.7.5.tar.gz -o snort.tar.gz
+fetch https://snort.org/downloads/snort/snort-2.9.8.0.tar.gz -o snort.tar.gz
 fetch https://snort.org/downloads/snort/daq-2.0.6.tar.gz -o daq.tar.gz
 tar -xvf snort.tar.gz 
 tar -xzf daq.tar.gz
@@ -318,13 +318,13 @@ make install
 
 echo "DAQ Installed" >> /root/log.install
 
-cd /usr/src/snort/snort-2.9.7.5
+cd /usr/src/snort/snort-2.9.8.0
 ./configure --enable-sourcefire
 make
 make install
 
 # need gen-msg.map from the build
-cp /usr/src/snort/snort-2.9.7.5/etc/gen-msg.map /usr/local/etc/snort
+cp /usr/src/snort/snort-2.9.8.0/etc/gen-msg.map /usr/local/etc/snort
 
 echo "Snort Installed" >> /root/log.install
 
@@ -499,7 +499,7 @@ cat << EOF > /etc/hunter-version;
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 Hunter NSM Version $VERSION
-Snort: 2.9.7.5
+Snort: 2.9.8.0
 DAQ: 2.0.6
 PulledPork: 0.7.2
 Bro: 2.4.1
