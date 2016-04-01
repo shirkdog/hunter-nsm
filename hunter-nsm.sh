@@ -3,7 +3,7 @@
 # Hunter NSM Platform
 # Simple install script for Snort/Bro IDS with JSON logging on FreeBSD
 #
-# Copyright (c) 2015, Michael Shirk, Daemon Security Inc.
+# Copyright (c) 2016, Michael Shirk, Daemon Security Inc.
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without modification,
@@ -28,13 +28,13 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 # Prereqs
-# Minimal FreeBSD 10.1 install with ports
+# Minimal FreeBSD/HardenedBSD install with ports
 # Static IP defined on an interface (in rc.conf)
 # freebsd-update fetch install (then reboot the system to make sure the system binaries are up to date)
 #
 # Install Versions
-# OS: FreeBSD/HardenedBSD 10.1 amd64
-# Snort: 2.9.8.0
+# OS: FreeBSD/HardenedBSD 10/11 amd64
+# Snort: 2.9.8.2
 # DAQ: 2.0.6
 # PulledPork: 0.7.2
 # Bro: 2.4.1
@@ -307,7 +307,7 @@ touch /usr/local/etc/snort/rules/black_list.rules
 # DAQ/Snort install
 mkdir -p /usr/src/snort
 cd /usr/src/snort
-fetch https://snort.org/downloads/snort/snort-2.9.8.0.tar.gz -o snort.tar.gz
+fetch https://snort.org/downloads/snort/snort-2.9.8.2.tar.gz -o snort.tar.gz
 fetch https://snort.org/downloads/snort/daq-2.0.6.tar.gz -o daq.tar.gz
 tar -xvf snort.tar.gz 
 tar -xzf daq.tar.gz
@@ -318,13 +318,13 @@ make install
 
 echo "DAQ Installed" >> /root/log.install
 
-cd /usr/src/snort/snort-2.9.8.0
+cd /usr/src/snort/snort-2.9.8.2
 ./configure --enable-sourcefire
 make
 make install
 
 # need gen-msg.map from the build
-cp /usr/src/snort/snort-2.9.8.0/etc/gen-msg.map /usr/local/etc/snort
+cp /usr/src/snort/snort-2.9.8.2/etc/gen-msg.map /usr/local/etc/snort
 
 echo "Snort Installed" >> /root/log.install
 
@@ -474,7 +474,7 @@ echo
 cat << EOF > /etc/hunter-version;
 # Hunter NSM Platform
 #
-# Copyright (c) 2015, Michael Shirk, Daemon Security Inc.
+# Copyright (c) 2016, Michael Shirk, Daemon Security Inc.
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without modification,
@@ -499,7 +499,7 @@ cat << EOF > /etc/hunter-version;
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 Hunter NSM Version $VERSION
-Snort: 2.9.8.0
+Snort: 2.9.8.2
 DAQ: 2.0.6
 PulledPork: 0.7.2
 Bro: 2.4.1
