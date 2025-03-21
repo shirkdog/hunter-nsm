@@ -3,7 +3,7 @@
 # Hunter NSM Platform
 # Simple install script for Suricata/Zeek NSM with JSON logging on FreeBSD
 #
-# Copyright (c) 2016-2025, Michael Shirk, Daemon Security Inc.
+# Copyright (c) 2025, Michael Shirk, Daemon Security Inc.
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without modification,
