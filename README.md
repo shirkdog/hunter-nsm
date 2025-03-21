@@ -35,3 +35,4 @@ Custom configs for Zeek:
  * tcpdump (Planning to add tcpdump to start with `/etc/rc.local` and to log to /nsm/pcap)
  * gotm/stenographer/time-machine for PCAP (Whichever of these works)
  * silk or analysis of traffic flows (long term)
+ * Make all of this work in seperate FreeBSD Jails (using bastille-bsd)
