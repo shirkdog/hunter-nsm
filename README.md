@@ -1,35 +1,40 @@
 Hunter NSM
 ==========
 
-Simple install script for Snort/Bro IDS with JSON logging on FreeBSD
+Simple install script for Suricata/Zeek NSM with JSON logging on FreeBSD
 
-Copyright (C) 2015 Michael Shirk, Daemon Security Inc.
+Copyright (C) 2016-2025 Michael Shirk, Daemon Security Inc.
 
 Hunter NSM is a modular platform for deploying network sensors. Instead of adding additional
 security vulnerabilities with the addition of numerous tools, Hunter provides a minimalist approach to achieving
-full network monitoring with Bro NSM and Snort IDS.
+full network monitoring with Zeek NSM and Suricata in IDS mode.
 
 ## Features and Capabilities
 
- * Automates the installation of Snort or Bro on a FreeBSD server
- * Configures JSON output using ids-tools and Bro native JSON output to work with any type of logging tool.
- * Uses PulledPork to automate signature updates
+ * Automates the installation of Suricata or Zeek (or both paired together) on a FreeBSD server
+ * Configures JSON output to work with any type of logging tool.
+ * Includes Grafana/Loki for a simple UI to view alerts.
  * Configures startup scripts to work with FreeBSD
 
 ## Key features of Hunter NSM
 
-All logging is configured to output to the /nsm directory (/nsm/bro2 for Bro, /nsm/snort for Snort). Before running 
+All logging is configured to output to the /nsm directory (/nsm/zeek for Zeek, /nsm/suricata for Suricata). Before running 
 the script, ensure that you have a enough disk space to log the security data.
 
-Custom configs for Snort:
+Custom configs for Suricata:
 
-`/usr/local/bin/snortUpdate.sh` This script runs PulledPork and restarts Snort for rule updates
+`/etc/crontab` Setup for Suricata rule updates
 
-`/usr/local/bin/snortStartup.sh` This script starts u2json by way of `/etc/rc.local` and reads the snort output from /var/log/snort and writes out JSON events.
+Custom configs for Zeek:
 
-`/usr/local/bin/du2json` This script runs u2json with the necessary command line arguments.
+`/etc/crontab` Setup for the zeekctl cronjob every 5 minutes
 
-Custom configs for Bro:
+`/usr/local/share/zeek/site/local.site` Updated the default site policy for JSON output
 
-`/opt/bro2/share/bro/site/local.bro` Updated the default site policy for JSON output
 
+## Future Plans
+ * tcpdump (short term PCAP on startup)
+ ** Planning to add tcpdump to start with `/etc/rc.local` and to log to /nsm/pcap
+ * gotm/stenographer/time-machine for PCAP (long term)
+ ** Whichever of these works
+ * silk or analysis of traffic flows (long term)
