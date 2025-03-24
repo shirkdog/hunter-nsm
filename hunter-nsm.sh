@@ -28,9 +28,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 # Prereqs
-# Minimal FreeBSD/HardenedBSD install with ports
-# Static IP defined on an interface (in rc.conf)
-# freebsd-update fetch install OR hbsd-update
+# Minimal FreeBSD/HardenedBSD install with ports and the following requirements
+# - Static IP defined on an interface (in rc.conf)
+# - Ensure you are using the "latest" pkgs for FreeBSD in /etc/pkg/FreeBSD.pkg
+# - freebsd-update fetch install OR hbsd-update
 # (then reboot the system to make sure the system binaries are up to date)
 #
 # Install Versions using OS: FreeBSD/HardenedBSD 14 amd64
@@ -52,7 +53,7 @@
 # FIX Zeek does not startup cleanly on reboot
 # Fully test logging
 
-VERSION="0.5.0"
+VERSION="0.5.1"
 
 UID=$(id -u);
 
@@ -94,7 +95,7 @@ while [ $# -ge 1 ]; do
                 ;;
                 --logging)
                     shift
-                    LOGGING=$1
+                    LOGGING=1
                 ;;
                 *)
                     echo "Invalid Option: $1"
@@ -117,7 +118,7 @@ FBSD_NETWORK=$(grep ifconfig_ /etc/rc.conf | grep -v _alias | grep -v DHCP | gre
 
 if [ ! $FBSD_IPADDRESS ] || [ "$FBSD_IPADDRESS" == "inet" ];
 then
-	echo "Error: a static IP is required for setting up Snort.";
+	echo "Error: a static IP is required for setting up Hunter-NSM.";
 	echo "Check that rc.conf has a static IP configured.";
 	echo "";
 	exit 13;
@@ -127,7 +128,7 @@ FBSD_INTERFACE=$(grep ifconfig_ /etc/rc.conf | grep -v _alias | grep -v DHCP | g
 
 if [ ! $FBSD_INTERFACE ];
 then
-	echo "Error: an interface has not been configured with a static IP which is required for Snort";
+	echo "Error: an interface has not been configured with a static IP which is required for Hunter-NSM";
 	echo "Check that rc.conf has a static IP configured.";
 	echo "";
 	exit 13;
@@ -310,6 +311,9 @@ EOF
 		sed -i '' -e 's/- ssh/#- ssh/g' /usr/local/etc/suricata/suricata.yaml
 		sed -i '' -e 's/- mqtt/#- mqtt/g' /usr/local/etc/suricata/suricata.yaml
 		sed -i '' -e 's/- http2/#- http2/g' /usr/local/etc/suricata/suricata.yaml
+		sed -i '' -e 's/- flow/#- flow/g' /usr/local/etc/suricata/suricata.yaml
+		# This changes the 8 second stats to be every hour
+		sed -i '' -e 's/interval: 8/interval: 3600/g' /usr/local/etc/suricata/suricata.yaml
 	fi
 	
 	# Create the initial signature set
@@ -321,12 +325,11 @@ echo "Suricata rc.conf and system config done" >> /root/log.install
 # Use zero-copy bpf
 echo "net.bpf.zerocopy_enable=1" >> /etc/sysctl.conf
 
-# Setup Grafana, Loki and Promtail
+# Setup Grafana, Loki and Alloy
 if [ "$LOGGING" ];
 then
-	
 	# Install the packages
-	pkg install -y grafana grafana-loki termshark
+	pkg install -y grafana grafana-loki alloy termshark
 	
 	# Enable services
 	sysrc grafana_enable="YES"
@@ -335,11 +338,9 @@ then
 
 	# Grafana
 	# As of this version, nothing is changed from the default, except setting up a self-signed cert for TLS
-	openssl req -newkey rsa:2048 -noenc -keyout /usr/local/etc/grafana/grafana.key -out /usr/local/etc/grafana/grafana.csr \ 
-	-subj "/CN=example.com" -addext "subjectAltName=DNS:example.com,DNS:*.example.com,IP:$FBSD_IPADDRESS"
+	openssl req -newkey rsa:2048 -noenc -keyout /usr/local/etc/grafana/grafana.key -out /usr/local/etc/grafana/grafana.csr -subj "/CN=example.com" -addext "subjectAltName=DNS:example.com,DNS:*.example.com,IP:$FBSD_IPADDRESS"
 
-	openssl x509 -signkey /usr/local/etc/grafana/grafana.key -in /usr/local/etc/grafana/grafana.csr \ 
-	-req -days 365 -out /usr/local/etc/grafana/grafana.crt
+	openssl x509 -signkey /usr/local/etc/grafana/grafana.key -in /usr/local/etc/grafana/grafana.csr -req -days 365 -out /usr/local/etc/grafana/grafana.crt
 	
 	chown grafana:grafana /usr/local/etc/grafana/grafana.crt /usr/local/etc/grafana/grafana.key
 	chmod 400 /usr/local/etc/grafana/grafana.crt /usr/local/etc/grafana/grafana.key
@@ -353,10 +354,10 @@ then
 	# The changes are not on by default
 	sed -i -e s'/\(grpc_listen_port: 9096\)/\1\n  grpc_server_max_send_msg_size: 104857600\n  grpc_server_max_recv_msg_size: 104857600\n  grpc_server_max_concurrent_streams: 1000/g' /usr/local/etc/loki.yaml
 
-	# Promtail
+	# Promtail (Alloy in the future)
 	# Most of the customization is here for bringing in Suricata/Zeek logs. 
 	# Due this, we create a brand new file
-	cat << EOF >> /usr/local/etc/promtail.yaml;
+	cat << EOF > /usr/local/etc/promtail.yaml;
 server:
   http_listen_port: 9080
   grpc_listen_port: 0
@@ -409,8 +410,6 @@ scrape_configs:
         type: alert
         __path__: /nsm/zeek/logs/current/*
 EOF
-	
-
 fi
 
 echo
@@ -429,18 +428,16 @@ then
 	echo 
 	echo "Zeek will startup and begin to log to /nsm/zeek/spool"
 fi
-echo
-
 if [ "$LOGGING" ];
 then
 	echo
-	echo "Grafana will be available at http://$FBSD_IPADDRESS:3000";
+	echo "Grafana will be available at https://$FBSD_IPADDRESS:3000";
 fi
 
 cat << EOF > /etc/hunter-version;
 # Hunter NSM Platform
 #
-# Copyright (c) 2016-2025, Michael Shirk, Daemon Security Inc.
+# Copyright (c) 2025, Michael Shirk, Daemon Security Inc.
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without modification,
