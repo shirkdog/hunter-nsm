@@ -36,10 +36,10 @@
 #
 # Install Versions using OS: FreeBSD/HardenedBSD 14 amd64
 # NSM Tools
-# - Suricata: 7.0.8
+# - Suricata: 7.0.10
 # - Zeek: 7.0.5
 # Logging Tools
-# - Grafana: 11.4.0
+# - Grafana: 11.6.0
 # - Grafana-Loki: 2.9.2
 # Analysis Tools
 # - termshark: 2.4.2
@@ -70,13 +70,16 @@ help_message()
 	echo
 	echo "Simple install script for Suricata/Zeek with JSON logging on FreeBSD"
 	echo
-	echo "Usage hunterNSM.sh --install <suricata|zeek|both> --netmap <interface> --logging";
+	echo "Usage hunterNSM.sh --install <suricata|zeek|both> --netmap --logging";
+	echo "                   --interface <sniffing interface>"
 	echo
 	echo "suricata = Install Suricata with JSON(eve) output."
 	echo "zeek = Install Zeek with JSON output."
 	echo "both = Install Suricata and Zeek with JSON output."
-	echo "netmap = Configures this interface to use netmap (requires netmap support)."
-	echo "logging = Sets up Grafana/Loki with Promtail providing a UI (3000/tcp)."
+	echo "netmap = Configures the sniffing interface to use netmap (requires netmap support)."
+	echo "logging = Sets up Grafana/Loki with Promtail providing a UI (3000/tcp with HTTPS)."
+	echo "interface = Specify an interface to use for sniffing packets (defaults to detecting the configured interface "
+        echo "            when not using netmap)"
 	echo "";
 	exit 13;
 }
@@ -90,12 +93,14 @@ while [ $# -ge 1 ]; do
                     INSTALL=$1
                 ;;
                 --netmap)
-                    shift
-                    NETMAP=$1
+                    NETMAP=1
                 ;;
                 --logging)
-                    shift
                     LOGGING=1
+                ;;
+                --interface)
+                    shift
+                    FBSD_SNIFFING=$1
                 ;;
                 *)
                     echo "Invalid Option: $1"
@@ -124,17 +129,22 @@ then
 	exit 13;
 fi
 
-FBSD_INTERFACE=$(grep ifconfig_ /etc/rc.conf | grep -v _alias | grep -v DHCP | grep '="\ *inet' | awk -F\_ '{print $2}' | awk -F\= '{print $1}')
+if [ ! $FBSD_SNIFFING ];
+then
+	FBSD_INTERFACE=$(grep ifconfig_ /etc/rc.conf | grep -v _alias | grep -v DHCP | grep '="\ *inet' | awk -F\_ '{print $2}' | awk -F\= '{print $1}')
+else
+	FBSD_INTERFACE=$FBSD_SNIFFING
+fi
 
 if [ ! $FBSD_INTERFACE ];
 then
-	echo "Error: an interface has not been configured with a static IP which is required for Hunter-NSM";
-	echo "Check that rc.conf has a static IP configured.";
+	echo "Error: an interface has not been configured or provided which is required for Hunter-NSM";
+	echo "Check if an interface is available for sniffing or has a static IP configured in rc.conf.";
 	echo "";
 	exit 13;
 fi
 
-if [ "$FBSD_INTERFACE" == "$NETMAP" ];
+if [ "$NETMAP" ] && [ "$FBSD_INTERFACE" != "$FBSD_SNIFFING" ];
 then
 	echo "Error: the netmap interface cannot be the same as the interface used for regular networking.";
 	echo "Select another interface and try again";
@@ -233,18 +243,25 @@ EOF
 EOF
 
 	# service script was added to the zeek pkg thanks to Craig Leres
-
 	# setup json output
         cat << EOF >> /usr/local/share/zeek/site/local.zeek
 # json output
 @load policy/tuning/json-logs.zeek
 EOF
+	if [ "$INSTALL" == "both" ];
+	then
+		# if both Suricata and Zeek are installed, add the community-id to Zeek
+   		sed -i '' -e 's/.*load policy\/frameworks\/notice\/community-id/@load policy\/frameworks\/notice\/community-id/' /usr/local/share/zeek/site/local.zeek
+  		sed -i '' -e 's/.*load policy\/protocols\/conn\/community-id-logging/@load policy\/protocols\/conn\/community-id-logging/' /usr/local/share/zeek/site/local.zeek
+	fi
 
         # install the default configs
 
         /usr/local/bin/zeekctl install
         /usr/local/bin/zeekctl deploy
         /usr/local/bin/zeekctl start
+	# brief pause after starting to then stop
+	sleep 5;
         /usr/local/bin/zeekctl stop
         /usr/local/bin/zeekctl cleanup --all
         /usr/local/bin/zeekctl deploy
@@ -272,7 +289,7 @@ EOF
 	
 	# Prepare Suricata configuration updates
 	sed -i '' -e 's/default-log-dir: \/var\/log/default-log-dir: \/nsm/g' /usr/local/etc/suricata/suricata.yaml
-	sed -i '' -e 's/suricata-version: ""/suricata-version: "7.0.8-BSDNSM"/' /usr/local/etc/suricata/suricata.yaml
+	sed -i '' -e 's/suricata-version: ""/suricata-version: "7.0.10-BSDNSM"/' /usr/local/etc/suricata/suricata.yaml
 
 	if [ "$INSTALL" == "suricata" ];
 	then
@@ -348,7 +365,6 @@ then
 	sed -i -e 's/\(# https certs & key file\)/\1\ncert_key=\/usr\/local\/etc\/grafana\/grafana.key\ncert_file=\/usr\/local\/etc\/grafana\/grafana.crt/g' /usr/local/etc/grafana/grafana.ini
 	sed -i -e 's/;protocol = http/protocol = https/g' /usr/local/etc/grafana/grafana.ini
 	
-	
 	# Loki
 	# These configurations ensure that loki will continue to process large amount of messages
 	# The changes are not on by default
@@ -356,7 +372,7 @@ then
 
 	# Promtail (Alloy in the future)
 	# Most of the customization is here for bringing in Suricata/Zeek logs. 
-	# Due this, we create a brand new file
+	# Due to this, we create a brand new file
 	cat << EOF > /usr/local/etc/promtail.yaml;
 server:
   http_listen_port: 9080
@@ -375,7 +391,7 @@ scrape_configs:
     - targets:
         - localhost
       labels:
-        job: varlogs
+        job: hostlogs
         __path__: /var/log/*log
 
   - job_name: suricata
@@ -462,9 +478,9 @@ cat << EOF > /etc/hunter-version;
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 Hunter NSM Version $VERSION
-Suricata: 7.0.8
+Suricata: 7.0.10
 Zeek: 7.0.5
-Grafana: 11.4.0
+Grafana: 11.6.0
 Grafana-Loki: 2.9.2
 EOF
 
