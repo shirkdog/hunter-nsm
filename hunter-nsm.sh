@@ -3,7 +3,7 @@
 # Hunter NSM Platform
 # Simple install script for Suricata/Zeek NSM with JSON logging on FreeBSD
 #
-# Copyright (c) 2025, Michael Shirk, Daemon Security Inc.
+# Copyright (c) 2026, Michael Shirk, Daemon Security Inc.
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without modification,
@@ -34,15 +34,15 @@
 # - freebsd-update fetch install OR hbsd-update
 # (then reboot the system to make sure the system binaries are up to date)
 #
-# Install Versions using OS: FreeBSD/HardenedBSD 14 amd64
+# Install Versions using OS: FreeBSD/HardenedBSD 15.1 amd64
 # NSM Tools
-# - Suricata: 7.0.10
-# - Zeek: 7.0.5
+# - Suricata: 8.0.7
+# - Zeek: 9.0.0
 # Logging Tools
-# - Grafana: 11.6.0
+# - Grafana: 13.1.1
 # - Grafana-Loki: 2.9.2
 # Analysis Tools
-# - termshark: 2.4.2
+# - termshark: 2.4.0
 #
 # Future Support
 # tcpdump (short term PCAP on startup)
@@ -52,8 +52,9 @@
 # ToDo:
 # FIX Zeek does not startup cleanly on reboot
 # Fully test logging
+# Promised a honeypot function, do this within jails
 
-VERSION="0.5.1"
+VERSION="0.5.5"
 
 UID=$(id -u);
 
@@ -78,6 +79,7 @@ help_message()
 	echo "both = Install Suricata and Zeek with JSON output."
 	echo "netmap = Configures the sniffing interface to use netmap (requires netmap support)."
 	echo "logging = Sets up Grafana/Loki with Promtail providing a UI (3000/tcp with HTTPS)."
+	echo "ipv6 = Use IPv6 for the logging and interface."
 	echo "interface = Specify an interface to use for sniffing packets (defaults to detecting the configured interface "
         echo "            when not using netmap)"
 	echo "";
@@ -98,6 +100,9 @@ while [ $# -ge 1 ]; do
                 --logging)
                     LOGGING=1
                 ;;
+                --ipv6)
+                    IPV6INT=1
+                ;;
                 --interface)
                     shift
                     FBSD_SNIFFING=$1
@@ -117,9 +122,15 @@ fi
 
 #check network configuration
 
-FBSD_IPADDRESS=$(grep ifconfig_ /etc/rc.conf | grep -v _alias | grep -v DHCP | grep '="\ *inet' | awk '{print $2}')
-FBSD_NETWORK=$(grep ifconfig_ /etc/rc.conf | grep -v _alias | grep -v DHCP | grep '="\ *inet' | awk '{print $4}'|tr -d '"')
-
+if [ ! $IPV6INT ];
+then
+	FBSD_IPADDRESS=$(grep ifconfig_ /etc/rc.conf | grep -v _alias | grep -v _ipv6 | grep -v DHCP | grep '="\ *inet' | awk '{print $2}')
+	FBSD_NETWORK=$(grep ifconfig_ /etc/rc.conf | grep -v _alias | grep -v _ipv6 | grep -v DHCP | grep '="\ *inet' | awk '{print $4}'|tr -d '"')
+else
+	echo "IPv6 not supported at this time"
+	echo "";
+	exit 6;
+fi
 
 if [ ! $FBSD_IPADDRESS ] || [ "$FBSD_IPADDRESS" == "inet" ];
 then
@@ -131,7 +142,7 @@ fi
 
 if [ ! $FBSD_SNIFFING ];
 then
-	FBSD_INTERFACE=$(grep ifconfig_ /etc/rc.conf | grep -v _alias | grep -v DHCP | grep '="\ *inet' | awk -F\_ '{print $2}' | awk -F\= '{print $1}')
+	FBSD_INTERFACE=$(grep ifconfig_ /etc/rc.conf | grep -v _alias | grep -v _ipv6 | grep -v DHCP | grep '="\ *inet' | awk -F\_ '{print $2}' | awk -F\= '{print $1}')
 else
 	FBSD_INTERFACE=$FBSD_SNIFFING
 fi
@@ -195,10 +206,10 @@ then
 	sed -i '' -e 's/^/#/g' /usr/local/etc/networks.cfg
 
 	# updates for logging 
-	sed -i '' -e 's/LogDir = \/usr\/local/LogDir = \/nsm\/zeek/g' /usr/local/etc/zeekctl.cfg
-	sed -i '' -e 's/SpoolDir = \/usr\/local/SpoolDir = \/nsm\/zeek/g' /usr/local/etc/zeekctl.cfg
-	sed -i '' -e 's/BrokerDBDir = \/usr\/local/BrokerDBDir = \/nsm\/zeek/g' /usr/local/etc/zeekctl.cfg
-	sed -i '' -e 's/FileExtractDir = \/usr\/local/FileExtractDir = \/nsm\/zeek/g' /usr/local/etc/zeekctl.cfg
+	sed -i '' -e 's/LogDir = .*$/LogDir = \/nsm\/zeek\/logs/g' /usr/local/etc/zeekctl.cfg
+	sed -i '' -e 's/SpoolDir = .*$/SpoolDir = \/nsm\/zeek\/spool/g' /usr/local/etc/zeekctl.cfg
+	sed -i '' -e 's/BrokerDBDir = .*$/BrokerDBDir = \/nsm\/zeek\/spool\/brokerstore/g' /usr/local/etc/zeekctl.cfg
+	sed -i '' -e 's/FileExtractDir = .*$/FileExtractDir = \/nsm\/zeek\/spool\/extract_files/g' /usr/local/etc/zeekctl.cfg
 
 	# setting a default retention of 365 days
 	sed -i '' -e 's/LogExpireInterval = .*$/LogExpireInterval = 365 days/g' /usr/local/etc/zeekctl.cfg
@@ -351,7 +362,7 @@ then
 	# Enable services
 	sysrc grafana_enable="YES"
 	sysrc loki_enable="YES"
-	sysrc promtail_enable="YES"
+	sysrc alloy_enable="YES"
 
 	# Grafana
 	# As of this version, nothing is changed from the default, except setting up a self-signed cert for TLS
@@ -364,68 +375,158 @@ then
 
 	sed -i -e 's/\(# https certs & key file\)/\1\ncert_key=\/usr\/local\/etc\/grafana\/grafana.key\ncert_file=\/usr\/local\/etc\/grafana\/grafana.crt/g' /usr/local/etc/grafana/grafana.ini
 	sed -i -e 's/;protocol = http/protocol = https/g' /usr/local/etc/grafana/grafana.ini
+
+        # Disable analytic reporting, and checks for updates for Grafana and plugins
+	sed -i -e 's/;reporting_enabled = true/reporting_enabled = false/g' /usr/local/etc/grafana/grafana.ini
+	sed -i -e 's/;check_for_updates = true/check_for_updates = false/g' /usr/local/etc/grafana/grafana.ini
+	sed -i -e 's/;check_for_plugin_updates = true/check_for_plugin_updates = false/g' /usr/local/etc/grafana/grafana.ini
 	
 	# Loki
 	# These configurations ensure that loki will continue to process large amount of messages
 	# The changes are not on by default
 	sed -i -e s'/\(grpc_listen_port: 9096\)/\1\n  grpc_server_max_send_msg_size: 104857600\n  grpc_server_max_recv_msg_size: 104857600\n  grpc_server_max_concurrent_streams: 1000/g' /usr/local/etc/loki.yaml
 
-	# Promtail (Alloy in the future)
+	# Alloy flow
+	# Converted from Promtail to work with Suricata/Zeek logs.
 	# Most of the customization is here for bringing in Suricata/Zeek logs. 
 	# Due to this, we create a brand new file
-	cat << EOF > /usr/local/etc/promtail.yaml;
-server:
-  http_listen_port: 9080
-  grpc_listen_port: 0
+	cat << EOF > /usr/local/etc/alloy.flow;
+loki.source.file "system" {
+	targets = [{
+		__address__ = "localhost",
+		__path__    = "/var/log/*log",
+		job         = "hostlogs",
+	}]
+	forward_to = [loki.write.default.receiver]
 
-positions:
-  filename: /var/db/promtail/positions.yaml
+	file_match {
+		enabled = true
+	}
+	legacy_positions_file = "/var/db/promtail/positions.yaml"
+}
 
-clients:
-  - url: http://localhost:3100/loki/api/v1/push
+loki.process "suricata" {
+	forward_to = [loki.write.default.receiver]
 
-scrape_configs:
+	stage.json {
+		expressions = {
+			alert      = "",
+			event_type = "event_type",
+			flow_id    = "flow_id",
+			timestamp  = "timestamp",
+		}
+	}
 
-  - job_name: system
-    static_configs:
-    - targets:
-        - localhost
-      labels:
-        job: hostlogs
-        __path__: /var/log/*log
+	stage.json {
+		expressions = {
+			signature = "",
+		}
+		source = "alert"
+	}
+}
 
-  - job_name: suricata
-    pipeline_stages:
-    - json:
-        expressions:
-           timestamp: timestamp
-           flow_id: flow_id
-           event_type: event_type
-           alert: 
-    - json:
-        expressions:
-           signature:
-        source: alert
-    static_configs:
-    - targets:
-        - localhost
-      labels:
-        job: suricata
-        type: alert
-        __path__: /nsm/suricata/eve.json
-  - job_name: zeek 
-    pipeline_stages:
-    - json:
-        expressions:
-           timestamp: timestamp
-    static_configs:
-    - targets:
-        - localhost
-      labels:
-        job: zeek
-        type: alert
-        __path__: /nsm/zeek/logs/current/*
+loki.source.file "suricata" {
+	targets = [{
+		__address__ = "localhost",
+		__path__    = "/nsm/suricata/eve.json",
+		job         = "suricata",
+		type        = "alert",
+	}]
+	forward_to = [loki.process.suricata.receiver]
+
+	file_match {
+		enabled = true
+	}
+	legacy_positions_file = "/var/db/promtail/positions.yaml"
+}
+
+loki.process "zeek" {
+	forward_to = [loki.write.default.receiver]
+
+	stage.json {
+		expressions = {
+			timestamp = "timestamp",
+		}
+	}
+}
+
+loki.source.file "zeek" {
+	targets = [{
+		__address__ = "localhost",
+		__path__    = "/nsm/zeek/logs/current/*",
+		job         = "zeek",
+		type        = "alert",
+	}]
+	forward_to = [loki.process.zeek.receiver]
+
+	file_match {
+		enabled = true
+	}
+	legacy_positions_file = "/var/db/promtail/positions.yaml"
+}
+
+loki.write "default" {
+	endpoint {
+		url = "http://localhost:3100/loki/api/v1/push"
+	}
+	external_labels = {}
+}
 EOF
+
+	# Promtail Configuration (replaced by Alloy and kept here for archive purposes)
+#	cat << EOF > /usr/local/etc/promtail.yaml;
+#server:
+#  http_listen_port: 9080
+#  grpc_listen_port: 0
+#
+#positions:
+#  filename: /var/db/promtail/positions.yaml
+#
+#clients:
+#  - url: http://localhost:3100/loki/api/v1/push
+#
+#scrape_configs:
+#
+#  - job_name: system
+#    static_configs:
+#    - targets:
+#        - localhost
+#      labels:
+#        job: hostlogs
+#        __path__: /var/log/*log
+#
+#  - job_name: suricata
+#    pipeline_stages:
+#    - json:
+#        expressions:
+#           timestamp: timestamp
+#           flow_id: flow_id
+#           event_type: event_type
+#           alert: 
+#    - json:
+#        expressions:
+#           signature:
+#        source: alert
+#    static_configs:
+#    - targets:
+#        - localhost
+#      labels:
+#        job: suricata
+#        type: alert
+#        __path__: /nsm/suricata/eve.json
+#  - job_name: zeek 
+#    pipeline_stages:
+#    - json:
+#        expressions:
+#           timestamp: timestamp
+#    static_configs:
+#    - targets:
+#        - localhost
+#      labels:
+#        job: zeek
+#        type: alert
+#        __path__: /nsm/zeek/logs/current/*
+#EOF
 fi
 
 echo
@@ -450,10 +551,16 @@ then
 	echo "Grafana will be available at https://$FBSD_IPADDRESS:3000";
 fi
 
+# Record the versions installed by hunter-nsm script
+SURI=$(pkg info suricata|grep Version|awk -F\: {'print $2}'|tr -d " ")
+ZEEK=$(pkg info zeek|grep Version|awk -F\: {'print $2}'|tr -d " ")
+GRAF=$(pkg info grafana|grep Version|awk -F\: {'print $2}'|tr -d " ")
+LOKI=$(pkg info grafana-loki|grep Version|awk -F\: {'print $2}'|tr -d " ")
+
 cat << EOF > /etc/hunter-version;
 # Hunter NSM Platform
 #
-# Copyright (c) 2025, Michael Shirk, Daemon Security Inc.
+# Copyright (c) 2026, Michael Shirk, Daemon Security Inc.
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without modification,
@@ -478,10 +585,10 @@ cat << EOF > /etc/hunter-version;
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 Hunter NSM Version $VERSION
-Suricata: 7.0.10
-Zeek: 7.0.5
-Grafana: 11.6.0
-Grafana-Loki: 2.9.2
+Suricata: $SURI
+Zeek: $ZEEK
+Grafana: $GRAF
+Grafana-Loki: $LOKI
 EOF
 
 exit 0;
